@@ -1,9 +1,26 @@
 import os
 import findspark
+from pyparsing import col
 from pyspark import SparkContext
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+import warnings
 from clustering.clusterer_factory import ClustererFactory
 from initialization_lib import initialize_logger
 from anomaly_detector import AnomalyDetector
+from plotting.plotter import Plotter
+
+
+def parse_data_from_kafka_msg(sdf, schema):
+    from pyspark.sql.functions import split
+    assert sdf.isStreaming, "DataFrame doesn't receive streaming data"
+    # col = split(sdf['value'], ',')  # split attributes to nested array in one Column
+    col = sdf['value']
+    # now expand col to multiple top-level columns
+    for idx, field in enumerate(schema):
+        sdf = sdf.withColumn(field.name, col.getItem(idx).cast(field.dataType))
+    return sdf.select([field.name for field in schema])
 
 
 class Consumer:
@@ -11,7 +28,6 @@ class Consumer:
     def run_ekg_consumer(config_dict: dict):
         findspark.init('C:/spark-2.3.3-bin-hadoop2.7')
         sc = SparkContext(appName='SparkEKGConsumer')
-
         logging_file = None if 'logging_file' not in config_dict else config_dict['logging_file']
         logger = initialize_logger(logging_file)
 
@@ -37,9 +53,16 @@ class Consumer:
         model = clusterer.perform_training(sc, clustering_params_dict)
 
         clusters = model.clusterCenters
-
+        Plotter.plot_cluster_centers(clusters)
         logger.info('Number of clusters in a model: ' + str(len(clusters)))
         for index, center in enumerate(clusters):
             logger.info('Cluster center ' + str(index) + ' : \n' + str(center) + '\n')
 
-        AnomalyDetector.perform_anomality_check(sc, model)
+        anomaly_detector = AnomalyDetector(model)
+
+        # Spark DStream
+        # AnomalyDetector.perform_anomality_check_dstream(anomaly_detector, sc)
+
+        # Spark structured streaming
+        AnomalyDetector.perform_anomality_check_structured_stream(anomaly_detector)
+

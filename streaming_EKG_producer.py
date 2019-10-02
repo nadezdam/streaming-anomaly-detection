@@ -2,7 +2,13 @@ from __future__ import print_function
 import logging
 import json
 import time
+import numpy as np
+# from datetime import datetime
+import datetime
+
 from kafka import KafkaProducer
+
+from plotting.plotter import Plotter
 
 
 class Producer:
@@ -20,12 +26,15 @@ class Producer:
         producer = Producer.configure_producer()
         with open(input_ekg_file) as f:
             ekg_lines = [line.rstrip('\r\n') for line in f]
-            for ekg_signal in ekg_lines:
-                ekg_signal_values = ekg_signal.split(',')
-                json_ekg_signal_values = json.dumps(ekg_signal_values)
+            for index, ekg_signal in enumerate(ekg_lines):
+                json_ekg_signal_values = dict()
+                json_ekg_signal_values['timestamp'] = datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S')
+                ekg_signal_values = [float(value) for value in ekg_signal.split(',')]
+                # Plotter.plot_signal_window(np.asarray(ekg_signal_values, dtype=np.float32), index)
+                json_ekg_signal_values['signal_values'] = ekg_signal_values
                 producer.send(topic=topic, key=key, value=json_ekg_signal_values, partition=partition)
                 producer.flush()
-                logging.info('Sent ekg signal message: ' + json_ekg_signal_values)
+                logging.info('Sent ekg signal message: ' + json.dumps(json_ekg_signal_values))
                 time.sleep(1)
 
         producer.close()

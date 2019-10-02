@@ -5,6 +5,7 @@ from pyspark.mllib.clustering import StreamingKMeans
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
 from clustering.clusterer_interface import Clusterer
+from plotting.plotter import Plotter
 
 
 class StreamingClusterer(Clusterer):
@@ -21,6 +22,7 @@ class StreamingClusterer(Clusterer):
 
         windowed_signal = kvs.map(lambda msg: Vectors.dense([float(value) for value in json.loads(msg[1])]))
 
+        # windowed_signal.foreachRDD(Plotter.plot_signal_window)
         model = StreamingKMeans(k=20, decayFactor=1.0).setRandomCenters(188, 0.0, 90)
         model.trainOn(windowed_signal)
 

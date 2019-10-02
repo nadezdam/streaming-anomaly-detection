@@ -2,6 +2,8 @@ from pyspark import SparkContext
 import numpy as np
 from pyspark.mllib.clustering import KMeans, KMeansModel
 from clustering.clusterer_interface import Clusterer
+from plotting import plotter
+from plotting.plotter import Plotter
 
 
 class BasicClusterer(Clusterer):
@@ -9,15 +11,18 @@ class BasicClusterer(Clusterer):
     # Performs k-means clustering and uses elbow method for determining optimal number of clusters in [min, max] range
     @staticmethod
     def perform_training(sc: SparkContext, params_dict: dict):
-        normal_ekg_data_path = None if 'normal_ekg_data_path' not in params_dict else params_dict['normal_ekg_data_path']
+        normal_ekg_data_path = None if 'normal_ekg_data_path' not in params_dict else params_dict[
+            'normal_ekg_data_path']
         min_num_of_clusters = 5 if 'min_num_of_clusters' not in params_dict else int(params_dict['min_num_of_clusters'])
-        max_num_of_clusters = 20 if 'max_num_of_clusters' not in params_dict else int(params_dict['max_num_of_clusters'])
+        max_num_of_clusters = 20 if 'max_num_of_clusters' not in params_dict else int(
+            params_dict['max_num_of_clusters'])
         boundary_ratio = 0.8 if 'boundary_ratio' not in params_dict else int(params_dict['boundary_ratio'])
 
         ekg_rdd_data = sc.textFile(normal_ekg_data_path).map(
             lambda line: np.array([float(val) for val in line.split(',')]))
 
-        k_range = range(min_num_of_clusters, max_num_of_clusters, 2)
+        # ekg_rdd_data.foreach(Plotter.plot_signal_window)
+        k_range = range(min_num_of_clusters, max_num_of_clusters, 1)
         prev_cost = float(np.inf)
         final_km = KMeansModel(ekg_rdd_data.takeSample(False, 1))
         cost_ratios = []
@@ -33,4 +38,6 @@ class BasicClusterer(Clusterer):
                 final_km = km
                 found_best = True
 
+        Plotter.plot_elbow(cost_ratios, k_range)
         return final_km
+        # return KMeans.train(ekg_rdd_data, max_num_of_clusters)

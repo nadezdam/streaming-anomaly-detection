@@ -11,4 +11,7 @@ if __name__ == "__main__":
     producer_thread = threading.Thread(target=Producer.run_ekg_stream_producer, args=[producer_config_dict])
     producer_thread.start()
 
+    # consumer_thread = threading.Thread(target=Consumer.run_ekg_consumer, args=[consumer_config_dict])
+    # consumer_thread.start()
+
     Consumer.run_ekg_consumer(consumer_config_dict)

@@ -1,17 +1,49 @@
 import json
 import scipy
+from pyparsing import col
 from pyspark import SparkContext
 from pyspark.mllib.clustering import StreamingKMeansModel
 from pyspark.mllib.linalg import Vectors
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
 from pyspark.streaming import StreamingContext
 from pyspark.streaming.kafka import KafkaUtils
+from scipy.spatial import distance
+
+from plotting.plotter import Plotter
 
 
 class AnomalyDetector:
+
+    def __init__(self, model: StreamingKMeansModel) -> None:
+        self.model = model
+
+    # TODO: improve method for detecting anomalies
+    # TODO: change returning result to noisy signal with alarm
     @staticmethod
-    def perform_anomality_check(sc: SparkContext, model: StreamingKMeansModel, batch_duration: int = 1):
+    def check_anomality(self, signal_window):
+        closest_center_index = self.model.predict(signal_window)
+        closest_center = self.model.centers[closest_center_index]
+        diff = distance.euclidean(closest_center, signal_window)
+        # correlation_coeff = distance.correlation(closest_center, window)
+        # diff = closest_center - window
+        # mean = scipy.mean(diff)
+        # outcome = 'Mean value of noisy signal: ' + str(mean) + '\n'
+        outcome = 'Euclidean distance between closest cluster center and signal: ' + str(diff) + '\n'
+        # outcome = 'Correlation distance: ' + str(correlation_coeff) + '\n'
+        if diff > 2:
+            outcome += 'ANOMALY DETECTED!'
+            Plotter.plot_distances(closest_center, signal_window, diff, is_anomaly=True)
+        else:
+            outcome += 'Heartbeat is in normal range'
+            Plotter.plot_distances(closest_center, signal_window, diff, is_anomaly=False)
+        return outcome
+
+    @staticmethod
+    def perform_anomality_check_dstream(self, sc: SparkContext, batch_duration: int = 1):
         ssc = StreamingContext(sc, batch_duration)
-        topics = ['test-topic']
+        topics = ['ekg-stream']
         kafka_params = {'metadata.broker.list': 'localhost:9092'}
 
         kvs = KafkaUtils.createDirectStream(ssc, topics, kafkaParams=kafka_params,
@@ -19,27 +51,48 @@ class AnomalyDetector:
 
         windowed_signals = kvs.map(lambda msg: Vectors.dense([float(value) for value in json.loads(msg[1])]))
 
-        predictions = windowed_signals.map(lambda window: AnomalyDetector.check_anomality(model, window))
-        # TODO send predictions to another Kafka topic for visualization
+        predictions = windowed_signals.map(lambda window: AnomalyDetector.check_anomality(self, window))
         predictions.pprint()
         ssc.start()
         ssc.awaitTermination()
 
-    # TODO: improve method for detecting anomalies
-    # TODO: change returning result to noisy signal with alarm
-    # TODO: change to spark UDF
     @staticmethod
-    def check_anomality(model, window):
-        closest_center_index = model.predict(window)
-        closest_center = model.centers[closest_center_index]
-        diff = closest_center - window
-        outcome = 'Cluster center: ' + str(closest_center) + '\n'
-        outcome += 'Signal window: ' + str(window) + '\n'
-        outcome += 'Noisy signal: ' + str(diff) + '\n'
-        mean = scipy.mean(diff)
-        outcome = 'Mean value of noisy signal: ' + str(mean) + '\n'
-        if mean > 1:
-            outcome += 'ANOMALY DETECTED!'
-        else:
-            outcome += 'Heart rate is in normal range'
-        return outcome
+    def perform_anomality_check_structured_stream(self):
+
+        process_row_udf = udf(lambda heart_beat: AnomalyDetector.check_anomality(self,heart_beat))
+                                                                                 # Vectors.dense(
+                                                                                 #     [float(value) for value in
+                                                                                 #      heart_beat])))
+
+        spark_session = SparkSession.builder \
+            .appName('EKG structured streaming') \
+            .getOrCreate()
+        ekg_signal_schema = StructType(
+            [StructField('timestamp', StringType()),
+             StructField('signal_values', ArrayType(FloatType()))
+             ])
+
+        ekg_stream_df = spark_session \
+            .readStream \
+            .format('kafka') \
+            .option('kafka.bootstrap.servers', 'localhost:9092') \
+            .option('subscribe', 'ekg-stream') \
+            .option('startingOffsets', 'earliest') \
+            .load() \
+            .select(from_json(col('value').cast('string'), ekg_signal_schema).alias('value'))
+
+        # .withColumn("value", regexp_replace(col("value").cast("string"), "\\\\", "")) \
+        # .withColumn("value", regexp_replace(col("value"), "^\"|\"$", "")) \
+        # .select(from_json(col('value').cast('string'), ekg_signal_schema).alias("opc"))
+
+        # ekg_stream_df = parse_data_from_kafka_msg(ekg_stream_df, ekg_signal_schema)
+        parsed_ekg_stream_df = ekg_stream_df.select(['value.timestamp', 'value.signal_values']) \
+            .withColumn('signal_values', process_row_udf('signal_values'))
+        parsed_ekg_stream_df.printSchema()
+        query = parsed_ekg_stream_df \
+            .writeStream \
+            .format('console') \
+            .option('truncate', False) \
+            .start()
+
+        query.awaitTermination()
