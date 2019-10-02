@@ -61,8 +61,8 @@ class Consumer:
         anomaly_detector = AnomalyDetector(model)
 
         # Spark DStream
-        # AnomalyDetector.perform_anomality_check_dstream(anomaly_detector, sc)
+        AnomalyDetector.perform_anomality_check_dstream(anomaly_detector, sc)
 
         # Spark structured streaming
-        AnomalyDetector.perform_anomality_check_structured_stream(anomaly_detector)
+        # AnomalyDetector.perform_anomality_check_structured_stream(anomaly_detector)
 

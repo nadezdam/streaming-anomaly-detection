@@ -20,7 +20,7 @@ class StreamingClusterer(Clusterer):
         kvs = KafkaUtils.createDirectStream(ssc, topics, kafkaParams=kafka_params,
                                             valueDecoder=lambda val: json.loads(val.decode('utf-8')))
 
-        windowed_signal = kvs.map(lambda msg: Vectors.dense([float(value) for value in json.loads(msg[1])]))
+        windowed_signal = kvs.map(lambda msg: Vectors.dense([float(value) for value in msg[1]['signal_values']]))
 
         # windowed_signal.foreachRDD(Plotter.plot_signal_window)
         model = StreamingKMeans(k=20, decayFactor=1.0).setRandomCenters(188, 0.0, 90)

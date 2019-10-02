@@ -19,8 +19,6 @@ class AnomalyDetector:
     def __init__(self, model: StreamingKMeansModel) -> None:
         self.model = model
 
-    # TODO: improve method for detecting anomalies
-    # TODO: change returning result to noisy signal with alarm
     @staticmethod
     def check_anomality(self, signal_window):
         closest_center_index = self.model.predict(signal_window)
@@ -29,15 +27,15 @@ class AnomalyDetector:
         # correlation_coeff = distance.correlation(closest_center, window)
         # diff = closest_center - window
         # mean = scipy.mean(diff)
-        # outcome = 'Mean value of noisy signal: ' + str(mean) + '\n'
         outcome = 'Euclidean distance between closest cluster center and signal: ' + str(diff) + '\n'
         # outcome = 'Correlation distance: ' + str(correlation_coeff) + '\n'
         if diff > 2:
-            outcome += 'ANOMALY DETECTED!'
-            Plotter.plot_distances(closest_center, signal_window, diff, is_anomaly=True)
+            outcome += 'ANOMALY DETECTED!\n'
+            file_path = Plotter.plot_distances(closest_center, signal_window, diff, is_anomaly=True)
         else:
-            outcome += 'Heartbeat is in normal range'
-            Plotter.plot_distances(closest_center, signal_window, diff, is_anomaly=False)
+            outcome += 'Heartbeat is in normal range \n'
+            file_path = Plotter.plot_distances(closest_center, signal_window, diff, is_anomaly=False)
+        outcome += 'Signal saved to: ' + file_path
         return outcome
 
     @staticmethod
@@ -49,7 +47,7 @@ class AnomalyDetector:
         kvs = KafkaUtils.createDirectStream(ssc, topics, kafkaParams=kafka_params,
                                             valueDecoder=lambda val: json.loads(val.decode('utf-8')))
 
-        windowed_signals = kvs.map(lambda msg: Vectors.dense([float(value) for value in json.loads(msg[1])]))
+        windowed_signals = kvs.map(lambda msg: Vectors.dense([float(value) for value in msg[1]['signal_values']]))
 
         predictions = windowed_signals.map(lambda window: AnomalyDetector.check_anomality(self, window))
         predictions.pprint()
@@ -59,10 +57,7 @@ class AnomalyDetector:
     @staticmethod
     def perform_anomality_check_structured_stream(self):
 
-        process_row_udf = udf(lambda heart_beat: AnomalyDetector.check_anomality(self,heart_beat))
-                                                                                 # Vectors.dense(
-                                                                                 #     [float(value) for value in
-                                                                                 #      heart_beat])))
+        process_row_udf = udf(lambda heart_beat: AnomalyDetector.check_anomality(self, heart_beat))
 
         spark_session = SparkSession.builder \
             .appName('EKG structured streaming') \
@@ -81,13 +76,8 @@ class AnomalyDetector:
             .load() \
             .select(from_json(col('value').cast('string'), ekg_signal_schema).alias('value'))
 
-        # .withColumn("value", regexp_replace(col("value").cast("string"), "\\\\", "")) \
-        # .withColumn("value", regexp_replace(col("value"), "^\"|\"$", "")) \
-        # .select(from_json(col('value').cast('string'), ekg_signal_schema).alias("opc"))
-
-        # ekg_stream_df = parse_data_from_kafka_msg(ekg_stream_df, ekg_signal_schema)
-        parsed_ekg_stream_df = ekg_stream_df.select(['value.timestamp', 'value.signal_values']) \
-            .withColumn('signal_values', process_row_udf('signal_values'))
+        parsed_ekg_stream_df = ekg_stream_df.select(['value.timestamp', 'value.signal_values'])
+        # .withColumn('signal_values', process_row_udf('signal_values'))
         parsed_ekg_stream_df.printSchema()
         query = parsed_ekg_stream_df \
             .writeStream \

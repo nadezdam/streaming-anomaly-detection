@@ -31,8 +31,10 @@ class Plotter:
             file_path += 'anomalies/'
         else:
             file_path += 'normal/'
-        plt.savefig(file_path + datetime.now().strftime('%H-%M-%S'))
+        full_file_path=file_path + datetime.now().strftime('%H-%M-%S')
+        plt.savefig(full_file_path)
         plt.clf()
+        return full_file_path
 
     @staticmethod
     def plot_signal_window(signal, index):

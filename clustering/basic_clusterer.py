@@ -2,7 +2,6 @@ from pyspark import SparkContext
 import numpy as np
 from pyspark.mllib.clustering import KMeans, KMeansModel
 from clustering.clusterer_interface import Clusterer
-from plotting import plotter
 from plotting.plotter import Plotter
 
 
