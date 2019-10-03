@@ -15,7 +15,7 @@ class StreamingClusterer(Clusterer):
         batch_duration = 1 if 'batch_duration' not in params_dict else params_dict['batch_duration']
         training_duration = 20 if 'training_duration' not in params_dict else params_dict['training_duration']
         ssc = StreamingContext(sc, batch_duration)
-        topics = ['test-topic']
+        topics = ['normal-ekg-stream']
         kafka_params = {'metadata.broker.list': 'localhost:9092'}
         kvs = KafkaUtils.createDirectStream(ssc, topics, kafkaParams=kafka_params,
                                             valueDecoder=lambda val: json.loads(val.decode('utf-8')))
@@ -23,7 +23,7 @@ class StreamingClusterer(Clusterer):
         windowed_signal = kvs.map(lambda msg: Vectors.dense([float(value) for value in msg[1]['signal_values']]))
 
         # windowed_signal.foreachRDD(Plotter.plot_signal_window)
-        model = StreamingKMeans(k=20, decayFactor=1.0).setRandomCenters(188, 0.0, 90)
+        model = StreamingKMeans(k=20, decayFactor=1.0).setRandomCenters(188, 1.0, 0)
         model.trainOn(windowed_signal)
 
         ssc.start()

@@ -16,7 +16,7 @@ from plotting.plotter import Plotter
 
 class AnomalyDetector:
 
-    def __init__(self, model: StreamingKMeansModel) -> None:
+    def __init__(self, model) -> None:
         self.model = model
 
     @staticmethod
@@ -39,9 +39,9 @@ class AnomalyDetector:
         return outcome
 
     @staticmethod
-    def perform_anomality_check_dstream(self, sc: SparkContext, batch_duration: int = 1):
+    def perform_anomality_check_dstream(self, sc: SparkContext, topic, batch_duration: int = 1):
         ssc = StreamingContext(sc, batch_duration)
-        topics = ['ekg-stream']
+        topics = [topic]
         kafka_params = {'metadata.broker.list': 'localhost:9092'}
 
         kvs = KafkaUtils.createDirectStream(ssc, topics, kafkaParams=kafka_params,

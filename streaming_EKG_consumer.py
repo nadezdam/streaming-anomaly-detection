@@ -1,36 +1,21 @@
 import os
 import findspark
-from pyparsing import col
 from pyspark import SparkContext
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import *
-from pyspark.sql.types import *
-import warnings
 from clustering.clusterer_factory import ClustererFactory
 from initialization_lib import initialize_logger
 from anomaly_detector import AnomalyDetector
 from plotting.plotter import Plotter
 
 
-def parse_data_from_kafka_msg(sdf, schema):
-    from pyspark.sql.functions import split
-    assert sdf.isStreaming, "DataFrame doesn't receive streaming data"
-    # col = split(sdf['value'], ',')  # split attributes to nested array in one Column
-    col = sdf['value']
-    # now expand col to multiple top-level columns
-    for idx, field in enumerate(schema):
-        sdf = sdf.withColumn(field.name, col.getItem(idx).cast(field.dataType))
-    return sdf.select([field.name for field in schema])
-
-
 class Consumer:
     @staticmethod
     def run_ekg_consumer(config_dict: dict):
-        findspark.init('C:/spark-2.3.3-bin-hadoop2.7')
+        spark_home = 'C:/spark-2.3.3-bin-hadoop2.7' if 'spark_home' not in config_dict else config_dict['spark_home']
+        findspark.init(spark_home)
         sc = SparkContext(appName='SparkEKGConsumer')
         logging_file = None if 'logging_file' not in config_dict else config_dict['logging_file']
         logger = initialize_logger(logging_file)
-
+        topic = 'ekg-stream' if 'topic' not in config_dict else config_dict['topic']
         clustering_mode = None if 'clustering_mode' not in config_dict else config_dict['clustering_mode']
         normal_ekg_data_file = None if 'normal_ekg_data_file' not in config_dict else config_dict[
             'normal_ekg_data_file']
@@ -61,8 +46,7 @@ class Consumer:
         anomaly_detector = AnomalyDetector(model)
 
         # Spark DStream
-        AnomalyDetector.perform_anomality_check_dstream(anomaly_detector, sc)
+        AnomalyDetector.perform_anomality_check_dstream(anomaly_detector, sc, topic)
 
         # Spark structured streaming
         # AnomalyDetector.perform_anomality_check_structured_stream(anomaly_detector)
-
